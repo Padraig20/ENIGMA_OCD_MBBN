@@ -1,0 +1,3 @@
+mask_test_loss_history,mask_train_loss_history,mask_val_loss_history,spatial_difference_test_loss_history,spatial_difference_train_loss_history,spatial_difference_val_loss_history,total_test_loss_history,total_train_loss_history,total_val_loss_history
+,1.6309242606163026,,,23.535713283832255,,,25.16663756737342,
+,1.1890751068408674,,,22.586401910048266,,,23.77547699854924,

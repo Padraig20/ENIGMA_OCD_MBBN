@@ -27,12 +27,11 @@ class LrHandler():
         self.num_iterations  = len(train_loader) # number of batches / world_size
         self.epoch = kwargs.get('nEpochs')
         self.total_iterations = self.num_iterations * self.epoch
-        self.lr_policy = kwargs.get('lr_policy')
+        # self.lr_policy = kwargs.get('lr_policy')
         self.gamma = 0.5 if self.lr_policy == 'SGDR' else kwargs.get('lr_gamma')
         self.warmup = int(self.total_iterations * 0.05) if kwargs.get('lr_warmup') is None else kwargs.get('lr_warmup')
         self.T_0 = int(0.3 * self.total_iterations) # 25800 in ABIDE
         self.T_mult = 1 if kwargs.get('lr_T_mult') is None else kwargs.get('lr_T_mult')
-
 
     def set_lr(self,dict_lr):
         if self.base_lr is None:

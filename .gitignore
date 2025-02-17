@@ -4,6 +4,6 @@ MBBN-main/wandb
 MBBN-main/runs
 MBBN-main/slurm
 MBBN-main/failed_experiments
-ENIGMA-OCD results/QC/carpet_plots
-ENIGMA-OCD results/QC/ENIGMA_QC_FC_data.csv
-ENIGMA-OCD results/QC/Nothing.ipynb
+ENIGMA-OCD_results/QC/carpet_plots
+ENIGMA-OCD_results/QC/ENIGMA_QC_FC_data.csv
+ENIGMA-OCD_results/QC/Nothing.ipynb

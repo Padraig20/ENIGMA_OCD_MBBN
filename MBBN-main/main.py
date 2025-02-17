@@ -26,7 +26,7 @@ def get_arguments(base_path):
     
     
     parser.add_argument('--target', type=str, default='OCD')
-    parser.add_argument('--fine_tune_task',
+    parser.add_argument('--fine_tune_task', default=None,  # ADDED default
                         choices=['regression','binary_classification'],
                         help='fine tune model objective. choose binary_classification in case of a binary classification task')
     parser.add_argument('--seed', type=int, default=1)
@@ -219,9 +219,11 @@ def run_phase(args,loaded_model_weights_path,phase_num,phase_name):
 
     #S = ['train','val']
 
-    if phase_num == '3' and not fine_tune_task == 'regression':
+    if phase_num == '3' and not args.fine_tune_task == 'regression':
+        print("regression")
         critical_metric = 'accuracy'
     else:
+        print("not regression")
         critical_metric = 'loss'
     model_weights_path = os.path.join(trainer.writer.experiment_folder,trainer.writer.experiment_title + '_BEST_val_{}.pth'.format(critical_metric)) 
 

@@ -132,6 +132,8 @@ class DataHandler():  # primary class for dataset management (initialization, pr
                         filename = os.path.join(kwargs.get('ukb_path'), i+'/'+'hcp_mmp1_'+i+'.npy')
                     elif self.intermediate_vec == 400:
                         filename = os.path.join(kwargs.get('ukb_path'), i+'/'+'schaefer_400Parcels_17Networks_'+i+'.npy')
+                    elif self.intermediate_vec == 304:
+                        filename = os.path.join(kwargs.get('ukb_path'), i+'/'+'schaefer_400Parcels_17Networks_'+i+'.npy')
                     file = np.load(filename)[20:20+self.seq_len].T
                 elif self.dataset_name == 'ABIDE':
                     ## only have schaefer atlas due to the /storage problem .. :(

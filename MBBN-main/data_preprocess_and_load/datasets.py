@@ -73,8 +73,6 @@ class ENIGMA_OCD_fMRI_timeseries(BaseDataset):
         self.meta_data = pd.read_csv(os.path.join(kwargs.get('base_path'),'data','metadata','ENIGMA_QC_final_subject_list.csv'))
         self.subject_names = os.listdir(self.data_dir)  
         self.subject_folders = []
-
-        valid_sub = os.listdir(kwargs.get('enigma_path'))
         
         # removing samples whose target value is NaN.
         if self.target == 'OCD':         
@@ -82,6 +80,7 @@ class ENIGMA_OCD_fMRI_timeseries(BaseDataset):
             subjects = list(non_na['Unique_ID'])
             subjects = list(map(str, subjects))    # convert subject IDs to strings
         elif self.target == 'reconstruction':
+            valid_sub = os.listdir(kwargs.get('enigma_path'))
             subjects = valid_sub
         
         data_list = []
@@ -108,11 +107,11 @@ class ENIGMA_OCD_fMRI_timeseries(BaseDataset):
                 if self.target == 'OCD':
                     target = non_na.loc[non_na['Unique_ID']==subid, 'OCD'].values[0]
                     target = 0.0 if target == 2 else 1.0
-                    # target = torch.tensor(target)
-                    target = torch.tensor(target, dtype=torch.bfloat16)  # for speed up
+                    target = torch.tensor(target)
+                    # target = torch.tensor(target, dtype=torch.bfloat16)  # for speed up
                 elif self.target == 'reconstruction':
-                    # target = torch.tensor(0)
-                    target = torch.tensor(0, dtype=torch.bfloat16)  # for speed up
+                    target = torch.tensor(0)
+                    # target = torch.tensor(0, dtype=torch.bfloat16)  # for speed up
 
                 # ################################################################
                 # ######################## DEBUG STATEMENT #######################
@@ -177,10 +176,15 @@ class ENIGMA_OCD_fMRI_timeseries(BaseDataset):
         
         ts_length = y.shape[1]   # temporal padding
         pad = self.sequence_length-ts_length
-               
-        if self.transfer_learning or self.finetune_test or self.finetune:
-            # standard length : 464 (UKB) - because I pretrained divfreqBERT with UKB!
-            pad = 464 - self.sequence_length
+
+        if pad < 0:
+            print(f"subj_name: {subj_name}, y.shape: {y.shape}, pad: {pad}")
+
+        ##### DEBUG #####       
+        # if self.transfer_learning or self.finetune_test or self.finetune:
+        #     # standard length : 464 (UKB) - because I pretrained divfreqBERT with UKB!
+        #     pad = 464 - self.sequence_length
+        #################
             
         TR = repetition_time(site)
  
@@ -534,16 +538,16 @@ class ENIGMA_OCD_fMRI_timeseries(BaseDataset):
                     imf4 = bandpass_filter_2d(y, band_cutoffs['imf4_lb'], band_cutoffs['imf4_hb'], 1/TR)
                     imf4 = stats.zscore(imf4, axis=1)
 
-                # imf1 = F.pad(torch.from_numpy(imf1), (0, pad), "constant", 0).T.float()
-                # imf2 = F.pad(torch.from_numpy(imf2), (0, pad), "constant", 0).T.float()
-                # imf3 = F.pad(torch.from_numpy(imf3), (0, pad), "constant", 0).T.float()
-                # imf4 = F.pad(torch.from_numpy(imf4), (0, pad), "constant", 0).T.float()
+                imf1 = F.pad(torch.from_numpy(imf1), (0, pad), "constant", 0).T.float()
+                imf2 = F.pad(torch.from_numpy(imf2), (0, pad), "constant", 0).T.float()
+                imf3 = F.pad(torch.from_numpy(imf3), (0, pad), "constant", 0).T.float()
+                imf4 = F.pad(torch.from_numpy(imf4), (0, pad), "constant", 0).T.float()
 
                 ##### for speed up ##### 
-                imf1 = F.pad(torch.from_numpy(imf1), (0, pad), "constant", 0).T.to(dtype=torch.bfloat16)
-                imf2 = F.pad(torch.from_numpy(imf2), (0, pad), "constant", 0).T.to(dtype=torch.bfloat16)
-                imf3 = F.pad(torch.from_numpy(imf3), (0, pad), "constant", 0).T.to(dtype=torch.bfloat16)
-                imf4 = F.pad(torch.from_numpy(imf4), (0, pad), "constant", 0).T.to(dtype=torch.bfloat16)
+                # imf1 = F.pad(torch.from_numpy(imf1), (0, pad), "constant", 0).T.to(dtype=torch.bfloat16)
+                # imf2 = F.pad(torch.from_numpy(imf2), (0, pad), "constant", 0).T.to(dtype=torch.bfloat16)
+                # imf3 = F.pad(torch.from_numpy(imf3), (0, pad), "constant", 0).T.to(dtype=torch.bfloat16)
+                # imf4 = F.pad(torch.from_numpy(imf4), (0, pad), "constant", 0).T.to(dtype=torch.bfloat16)
                 ########################
 
                 """
@@ -1693,6 +1697,8 @@ class UKB_fMRI_timeseries(BaseDataset):
                 path_to_fMRIs = os.path.join(self.data_dir, str(subject), 'hcp_mmp1_'+str(subject)+'.npy')
             elif self.intermediate_vec == 400:
                 path_to_fMRIs = os.path.join(self.data_dir, str(subject), 'schaefer_400Parcels_17Networks_'+str(subject)+'.npy')
+            elif self.intermediate_vec == 304:
+                path_to_fMRIs = os.path.join(self.data_dir, str(subject), 'schaefer_400Parcels_17Networks_'+str(subject)+'.npy')
                 
                 
             self.index_l.append((i, subject, path_to_fMRIs, target))           
@@ -1716,77 +1722,77 @@ class UKB_fMRI_timeseries(BaseDataset):
         pad = self.sequence_length - ts_length # 어차피 0일거임..
 
         TR = 0.735
-        if self.lorentzian:
+        # if self.lorentzian:
         
-            '''
-            get knee frequency
-            '''
+        #     '''
+        #     get knee frequency
+        #     '''
 
-            sample_whole = np.zeros(self.sequence_length,)
-            for i in range(self.intermediate_vec):
-                sample_whole+=y[i]
+        #     sample_whole = np.zeros(self.sequence_length,)
+        #     for i in range(self.intermediate_vec):
+        #         sample_whole+=y[i]
 
-            sample_whole /= self.intermediate_vec    
+        #     sample_whole /= self.intermediate_vec    
 
-            T = TimeSeries(sample_whole, sampling_interval=TR)
-            S_original = SpectralAnalyzer(T)
+        #     T = TimeSeries(sample_whole, sampling_interval=TR)
+        #     S_original = SpectralAnalyzer(T)
 
-            # Lorentzian function fitting
-            xdata = np.array(S_original.spectrum_fourier[0][1:])
-            ydata = np.abs(S_original.spectrum_fourier[1][1:])
+        #     # Lorentzian function fitting
+        #     xdata = np.array(S_original.spectrum_fourier[0][1:])
+        #     ydata = np.abs(S_original.spectrum_fourier[1][1:])
 
-            # initial parameter
-            p0 = [0, 0.006]
+        #     # initial parameter
+        #     p0 = [0, 0.006]
 
-            # fitting Lorentzian function
-            popt, pcov = curve_fit(lorentzian_function, xdata, ydata, p0=p0, maxfev = 5000)
+        #     # fitting Lorentzian function
+        #     popt, pcov = curve_fit(lorentzian_function, xdata, ydata, p0=p0, maxfev = 5000)
             
-            f1 = popt[1]
+        #     f1 = popt[1]
             
-            knee = round(popt[1]/(1/(sample_whole.shape[0]*TR)))
+        #     knee = round(popt[1]/(1/(sample_whole.shape[0]*TR)))
             
-            if knee <= 0:
-                knee = 1
+        #     if knee <= 0:
+        #         knee = 1
             
             
-            if self.fmri_dividing_type == 'three_channels':
-                # initial parameter
-                p1 = [2, 1, 23, 25, 0.16]
-                # fitting multifractal function
-                popt_mo, pcov = curve_fit(multi_fractal_function, xdata[knee:], ydata[knee:], p0=p1, maxfev = 50000)
-                pink = round(popt_mo[-1]/(1/(sample_whole.shape[0]*TR)))
-                f2 = popt_mo[-1]
+        #     if self.fmri_dividing_type == 'three_channels':
+        #         # initial parameter
+        #         p1 = [2, 1, 23, 25, 0.16]
+        #         # fitting multifractal function
+        #         popt_mo, pcov = curve_fit(multi_fractal_function, xdata[knee:], ydata[knee:], p0=p1, maxfev = 50000)
+        #         pink = round(popt_mo[-1]/(1/(sample_whole.shape[0]*TR)))
+        #         f2 = popt_mo[-1]
 
-        else:
-            if self.fmri_type == 'timeseries':
-                pass
-            else:
-                ## don't use raw knee frequency
-                sample_whole = np.zeros(self.sequence_length,)
-                for i in range(self.intermediate_vec):
-                    sample_whole+=y[i]
+        # else:
+        #     if self.fmri_type == 'timeseries':
+        #         pass
+        #     else:
+        #         ## don't use raw knee frequency
+        #         sample_whole = np.zeros(self.sequence_length,)
+        #         for i in range(self.intermediate_vec):
+        #             sample_whole+=y[i]
 
-                sample_whole /= self.intermediate_vec    
+        #         sample_whole /= self.intermediate_vec    
 
-                T = TimeSeries(sample_whole, sampling_interval=TR)
-                S_original = SpectralAnalyzer(T)
+        #         T = TimeSeries(sample_whole, sampling_interval=TR)
+        #         S_original = SpectralAnalyzer(T)
 
-                # Lorentzian function fitting
-                xdata = np.array(S_original.spectrum_fourier[0][1:])
-                frequency_range = list(range(xdata.shape[0]))
-                import random
-                if self.fmri_dividing_type == 'three_channels':
-                    a,b = random.sample(frequency_range, 2)
-                    knee = min(a,b)
-                    if knee == 0:
-                        knee = 1
-                    pink = max(a,b)
-                    if pink == len(frequency_range)-1:
-                        pink = len(frequency_range)-2
-                elif self.fmri_dividing_type == 'two_channels':
-                    knee = random.sample(frequency_range, 1)[0]
-                    if knee == 0:
-                        knee = 1
+        #         # Lorentzian function fitting
+        #         xdata = np.array(S_original.spectrum_fourier[0][1:])
+        #         frequency_range = list(range(xdata.shape[0]))
+        #         import random
+        #         if self.fmri_dividing_type == 'three_channels':
+        #             a,b = random.sample(frequency_range, 2)
+        #             knee = min(a,b)
+        #             if knee == 0:
+        #                 knee = 1
+        #             pink = max(a,b)
+        #             if pink == len(frequency_range)-1:
+        #                 pink = len(frequency_range)-2
+        #         elif self.fmri_dividing_type == 'two_channels':
+        #             knee = random.sample(frequency_range, 1)[0]
+        #             if knee == 0:
+        #                 knee = 1
         
         if self.fmri_type == 'timeseries':
             y = scipy.stats.zscore(y, axis=1)
@@ -1887,7 +1893,85 @@ class UKB_fMRI_timeseries(BaseDataset):
             ans_dict = {'fmri_sequence':high,'subject':subj,'subject_name':subj_name, self.target:target}
             
         elif self.fmri_type == 'divided_timeseries':
-            if self.fmri_dividing_type == 'three_channels':
+
+            if self.fmri_dividing_type == 'four_channels':
+
+                """
+                VMD for each subject
+                """
+
+                # average the time series across ROIs
+                sample_whole = np.zeros(ts_length,)
+                intermediate_vec = y.shape[0]
+
+                for i in range(intermediate_vec):
+                    sample_whole+=y[i]
+
+                sample_whole /= intermediate_vec 
+
+                # VMD setting
+                f = sample_whole
+                f = (f - np.mean(f)) / np.std(f)  # z-score normalization
+                K = 4             # number of modes
+                DC = 0            # no DC part imposed
+                init = 0          # initialize omegas uniformly
+                tol = 1e-7        # convergence tolerance
+                alpha = 100
+                tau = 3.5
+
+                # VMD
+                u, _, omega = VMD(f, alpha, tau, K, DC, init, tol)
+
+                band_cutoffs = compute_imf_bandwidths(u, omega, 1/TR)
+                
+                if band_cutoffs['imf1_lb'] > band_cutoffs['imf1_hb']:
+                    raise ValueError(f"band_cutoffs['imf1_lb'] {band_cutoffs['imf1_lb']} is larger than band_cutoffs['imf1_hb'] {band_cutoffs['imf1_hb']} for subject {subj_name}")
+                elif band_cutoffs['imf1_lb'] == band_cutoffs['imf1_hb']:
+                    imf1 = np.zeros((y.shape[0], y.shape[1]))
+                else:
+                    imf1 = bandpass_filter_2d(y, band_cutoffs['imf1_lb'], band_cutoffs['imf1_hb'], 1/TR)
+                    imf1 = stats.zscore(imf1, axis=1)
+
+                if band_cutoffs['imf2_lb'] > band_cutoffs['imf2_hb']:
+                    raise ValueError(f"band_cutoffs['imf2_lb'] {band_cutoffs['imf2_lb']} is larger than band_cutoffs['imf2_hb'] {band_cutoffs['imf2_hb']} for subject {subj_name}")
+                elif band_cutoffs['imf2_lb'] == band_cutoffs['imf2_hb']:
+                    imf2 = np.zeros((y.shape[0], y.shape[1]))
+                else:
+                    imf2 = bandpass_filter_2d(y, band_cutoffs['imf2_lb'], band_cutoffs['imf2_hb'], 1/TR)
+                    imf2 = stats.zscore(imf2, axis=1)
+
+                if band_cutoffs['imf3_lb'] > band_cutoffs['imf3_hb']:
+                    raise ValueError(f"band_cutoffs['imf3_lb'] {band_cutoffs['imf3_lb']} is larger than band_cutoffs['imf3_hb'] {band_cutoffs['imf3_hb']} for subject {subj_name}")
+                elif band_cutoffs['imf3_lb'] == band_cutoffs['imf3_hb']:
+                    imf3 = np.zeros((y.shape[0], y.shape[1]))
+                else:
+                    imf3 = bandpass_filter_2d(y, band_cutoffs['imf3_lb'], band_cutoffs['imf3_hb'], 1/TR)
+                    imf3 = stats.zscore(imf3, axis=1)
+
+                if band_cutoffs['imf4_lb'] > band_cutoffs['imf4_hb']:
+                    raise ValueError(f"band_cutoffs['imf4_lb'] {band_cutoffs['imf4_lb']} is larger than band_cutoffs['imf4_hb'] {band_cutoffs['imf4_hb']} for subject {subj_name}")
+                elif band_cutoffs['imf4_lb'] == band_cutoffs['imf4_hb']:
+                    imf4 = np.zeros((y.shape[0], y.shape[1]))
+                else:
+                    imf4 = bandpass_filter_2d(y, band_cutoffs['imf4_lb'], band_cutoffs['imf4_hb'], 1/TR)
+                    imf4 = stats.zscore(imf4, axis=1)
+
+                imf1 = F.pad(torch.from_numpy(imf1), (0, pad), "constant", 0).T.float()
+                imf2 = F.pad(torch.from_numpy(imf2), (0, pad), "constant", 0).T.float()
+                imf3 = F.pad(torch.from_numpy(imf3), (0, pad), "constant", 0).T.float()
+                imf4 = F.pad(torch.from_numpy(imf4), (0, pad), "constant", 0).T.float()
+
+                if self.sequence_length > ts_length:
+                    mask = (imf1 != 0).float()  # Create mask where 1 means valid and 0 means padding
+                else:
+                    mask = torch.ones(self.sequence_length, intermediate_vec)
+                    
+                ans_dict= {'fmri_imf1_sequence':imf1, 'fmri_imf2_sequence':imf2,
+                           'fmri_imf3_sequence':imf3, 'fmri_imf4_sequence':imf4,
+                           'subject':subj, 'subject_name':subj_name, self.target:target, 'mask': mask}
+                
+
+            elif self.fmri_dividing_type == 'three_channels':
                 # 01 high ~ (low+ultralow)
                 T1 = TimeSeries(y, sampling_interval=TR)
                 S_original1 = SpectralAnalyzer(T1)

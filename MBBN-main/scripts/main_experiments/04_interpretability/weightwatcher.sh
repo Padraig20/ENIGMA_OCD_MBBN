@@ -6,12 +6,16 @@
 # conda activate {your environment}
 # cd {your directory which contains 'main.py'}
 
+# Perlmutter:
+# cd /pscratch/sd/p/pakmasha/ENIGMA_OCD_MBBN_git/ENIGMA_OCD_MBBN/MBBN-main
+# salloc -A m4750_g -C gpu -q interactive -t 4:00:00 -N 1 --gpus 1
+# source mbbn/bin/activate
+# ./scripts/main_experiments/04_interpretability/weightwatcher.sh
 
 ## 03 experiment
-
-python main.py --step 2 --fmri_type divided_timeseries --exp_name test --wandb_mode offline \
---transformer_hidden_layers 8 --num_heads 8 --exp_name {name of figure} \
---spatiotemporal --spat_diff_loss_type minus_log \
---pretrained_model_weights_path {your pretrained model path} \
---wandb_mode offline --weightwatcher \
---weightwatcher_save_dir {the path you want to store weightwatcher results} \
+python main.py --step 2 --fmri_type divided_timeseries --wandb_mode offline \
+--transformer_hidden_layers 8 --num_heads 4 --exp_name enigma_hub_100roi_epoch_1408 \
+--spatiotemporal --spat_diff_loss_type minus_log --intermediate_vec 316 --fmri_dividing_type four_channels \
+--pretrained_model_weights_path /pscratch/sd/p/pakmasha/ENIGMA_OCD_MBBN_git/ENIGMA_OCD_MBBN/MBBN-main/experiments/ENIGMA_OCD_divfreqBERT_reconstruction_reconstruction_pretraining_hub_700_100roi_highprec_seed1/ENIGMA_OCD_divfreqBERT_reconstruction_reconstruction_pretraining_hub_700_100roi_highprec_seed1_epoch_1408_BEST_val_loss.pth \
+--wandb_mode offline --weightwatcher --fine_tune_task binary_classification \
+--weightwatcher_save_dir /pscratch/sd/p/pakmasha/ENIGMA_OCD_MBBN_git/ENIGMA_OCD_MBBN/MBBN-main/weightwatcher \

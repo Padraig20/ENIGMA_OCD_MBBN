@@ -66,23 +66,23 @@ class Trainer():
             else:
                 self.train_loader, self.val_loader, self.test_loader = DataHandler(**kwargs).create_dataloaders()
             
-        self.lr_handler = LrHandler(self.train_loader, **kwargs)
+            self.lr_handler = LrHandler(self.train_loader, **kwargs)
+            self.create_model() # model on cpu
+            self.load_model_checkpoint()
+            self.set_model_device() # set DDP or DP after loading checkpoint at CPUs
+            self.create_optimizer()
+            self.lr_handler.set_schedule(self.optimizer)
+            self.scaler = GradScaler() 
+            self.load_optim_checkpoint()
+        else:
+            # When using weightwatcher, don't create dataloaders and learning rate handler.
+            # You may still need to create/load the model.
+            self.create_model()
+            self.load_model_checkpoint()
+            self.set_model_device()           
                 
-        self.create_model() # model on cpu
-        self.load_model_checkpoint()
-        self.set_model_device() # set DDP or DP after loading checkpoint at CPUs
-        
-        self.create_optimizer()
-        self.lr_handler.set_schedule(self.optimizer)
-        self.scaler = GradScaler() 
-        
-        
-        self.load_optim_checkpoint()
-
         self.writer = Writer(sets, self.val_threshold, **kwargs)
         self.sets = sets
-        
-        
         
         #wandb
         os.environ["WANDB_API_KEY"] = self.wandb_key
@@ -187,6 +187,8 @@ class Trainer():
             if self.fmri_type in ['timeseries','frequency', 'time_domain_low', 'time_domain_ultralow', 'time_domain_high', 'frequency_domain_low', 'frequency_domain_ultralow']:
                 self.model = Transformer_Finetune(**self.kwargs)
             elif self.fmri_type == 'divided_timeseries':
+                if self.fmri_dividing_type == 'four_channels':                   
+                    self.model = Transformer_Finetune_Four_Channels(**self.kwargs)
                 if self.fmri_dividing_type == 'three_channels':                   
                     self.model = Transformer_Finetune_Three_Channels(**self.kwargs)
                 elif self.fmri_dividing_type == 'two_channels':
@@ -287,18 +289,27 @@ class Trainer():
             df.to_csv(f'{self.weightwatcher_save_dir}/{self.exp_name}.csv', index=False) 
             plt.xlabel('layers')
             plt.ylabel('alpha')
-            if int(self.exp_name.split('epoch')[-1]) < 100:
-                if self.exp_name.split('_')[0] == 'HCPMMP1':
-                    plt.ylim(0, 12)  
-                    plt.yticks(range(0, 13, 2))  
-                elif self.exp_name.split('_')[0] == 'Schaefer':  ### EDIT ###
-                    plt.ylim(0, 26) 
-                    plt.yticks(range(0, 27, 2))  
-            else:
-                # plt.ylim(0, 10)  
-                # plt.yticks(range(0, 11, 2))
-                plt.ylim(0, 26)   # set to the Schaefer settings
-                plt.yticks(range(0, 27, 2))   # set to the Schaefer settings
+
+            # if int(self.exp_name.split('epoch')[-1]) < 100:
+            #     if self.exp_name.split('_')[0] == 'HCPMMP1':
+            #         plt.ylim(0, 12)  
+            #         plt.yticks(range(0, 13, 2))  
+            #     elif self.exp_name.split('_')[0] == 'Schaefer':  ### EDIT ###
+            #         plt.ylim(0, 26) 
+            #         plt.yticks(range(0, 27, 2))  
+            # else:
+            #     # plt.ylim(0, 10)  
+            #     # plt.yticks(range(0, 11, 2))
+            #     plt.ylim(0, 26)   # set to the Schaefer settings
+            #     plt.yticks(range(0, 27, 2))   # set to the Schaefer settings
+
+            ##### DEBUG #####
+            # plt.ylim(0, 10)  
+            # plt.yticks(range(0, 11, 2))
+            plt.ylim(0, 26)   # set to the Schaefer settings
+            plt.yticks(range(0, 27, 2))   # set to the Schaefer settings
+            #################
+
             plt.axhline(y=6, linestyle='--', color='r')
             plt.scatter(range(0, len(details)), details['alpha'])
             plt.savefig(f'{self.weightwatcher_save_dir}/{self.exp_name}.png', 
@@ -412,8 +423,13 @@ class Trainer():
             self.optimizer.zero_grad()
             if self.amp:
                 torch.cuda.nvtx.range_push("forward pass")
-                # with autocast():
-                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):  # for speed up
+                with autocast():
+                # with torch.autocast(device_type="cuda", dtype=torch.bfloat16):  # for speed up
+                    
+                    if torch.isnan(input_dict['fmri_imf1_sequence'].sum()):
+                        print(f"fmri_imf1_sequence before forward_pass: {input_dict['fmri_imf1_sequence'].sum()}")  # ukb debugging
+                        print(f"input_dict['subject_name']: {input_dict['subject_name']}")
+
                     loss_dict, loss = self.forward_pass(input_dict)
                 torch.cuda.nvtx.range_pop()
                 loss = loss / self.accumulation_steps # gradient accumulation
@@ -428,16 +444,16 @@ class Trainer():
                         # print('executing gradient clipping')
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1, error_if_nonfinite=False)
 
-                    # self.scaler.step(self.optimizer)
-                    # scale = self.scaler.get_scale()
-                    # self.scaler.update()
-                    # skip_lr_sched = (scale > self.scaler.get_scale())
+                    self.scaler.step(self.optimizer)
+                    scale = self.scaler.get_scale()
+                    self.scaler.update()
+                    skip_lr_sched = (scale > self.scaler.get_scale())
 
                     ##### for speed up #####
-                    scale_before_update = self.scaler.get_scale() 
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                    skip_lr_sched = (scale_before_update > self.scaler.get_scale())
+                    # scale_before_update = self.scaler.get_scale() 
+                    # self.scaler.step(self.optimizer)
+                    # self.scaler.update()
+                    # skip_lr_sched = (scale_before_update > self.scaler.get_scale())
                     ########################
 
                 if not skip_lr_sched:
@@ -462,8 +478,8 @@ class Trainer():
                 # print(f"Batch {batch_idx + 1}/{len(loader)} class distribution: {dict(zip(*np.unique(y_true, return_counts=True)))}")
                 #######################
                 
-                # with autocast():
-                with torch.autocast(device_type="cuda", dtype=torch.bfloat16): # for speed up
+                with autocast():
+                # with torch.autocast(device_type="cuda", dtype=torch.bfloat16): # for speed up
                     loss_dict, _ = self.forward_pass(input_dict)
                 self.writer.write_losses(loss_dict, set=set)
                 if self.profiling == True:
@@ -482,8 +498,12 @@ class Trainer():
         # input_dict = {k:(v.to(self.device) if (self.cuda and torch.is_tensor(v)) else v) for k,v in input_dict.items()}
         
         ### DEBUT STATEMENT ###
+        # input_dict = {    # for speed up
+        #     k: (v.to(self.device).to(dtype=torch.bfloat16) if (self.cuda and torch.is_tensor(v)) else v) 
+        #     for k, v in input_dict.items()
+        # }
         input_dict = {
-            k: (v.to(self.device).to(dtype=torch.bfloat16) if (self.cuda and torch.is_tensor(v)) else v) 
+            k: (v.to(self.device) if (self.cuda and torch.is_tensor(v)) else v) 
             for k, v in input_dict.items()
         }
         for k, v in input_dict.items():
@@ -780,6 +800,14 @@ class Trainer():
         elif self.fmri_dividing_type == 'five_channels':
             spatial_difference_loss = self.spatial_difference_loss_func(output_dict['imf1_spatial_attention'], output_dict['imf2_spatial_attention'], output_dict['imf3_spatial_attention'],  output_dict['imf4_spatial_attention'],  output_dict['imf5_spatial_attention'])
 
+        # Debug check: log if NaNs appear
+        if spatial_difference_loss is not None and torch.isnan(spatial_difference_loss).any():
+            print("DEBUG: NaNs detected in spatial_difference_loss!")
+            print("Input stats:")
+            for key, value in input_dict.items():
+                if torch.is_tensor(value):
+                    print(f"{key}: {value.mean().item():.4f} ± {value.std().item():.4f}")
+
         return spatial_difference_loss
    
     def compute_mask(self, input_dict, output_dict):
@@ -845,7 +873,11 @@ class Trainer():
                                                                 output_dict['spatial_mask_spatiotemporal_imf4_fmri_sequence'])
                     mask_loss_imf4 = temporal_mask_loss_imf4 + spatial_mask_loss_imf4
                     
-                else:
+                else:   # whole
+                    # print(f"fmri_imf1_sequence: {fmri_imf1_sequence[0,:10]}")
+                    # print(f"fmri_imf2_sequence: {fmri_imf2_sequence[0,:10]}")
+                    # print(f"fmri_imf3_sequence: {fmri_imf3_sequence[0,:10]}")
+                    # print(f"fmri_imf4_sequence: {fmri_imf4_sequence[0,:10]}")
                     mask_loss_imf1 = self.mask_loss_func(fmri_imf1_sequence,
                                                         output_dict['mask_spatiotemporal_imf1_fmri_sequence'])
                     mask_loss_imf2 = self.mask_loss_func(fmri_imf2_sequence,
@@ -926,6 +958,17 @@ class Trainer():
         ### DEBUG STATEMENT ###
         # print(f"Mask loss: {mask_loss.item()}")
         #######################
+
+        # Debug check: log if NaNs appear
+        if mask_loss is not None and torch.isnan(mask_loss).any():
+            print("DEBUG: NaNs detected in mask_loss!")
+            print(f"mask_loss_imf1: {mask_loss_imf1.item()}")
+            print(f"mask_loss_imf2: {mask_loss_imf2.item()}")
+            print(f"mask_loss_imf3: {mask_loss_imf3.item()}")
+            print(f"mask_loss_imf4: {mask_loss_imf4.item()}")
+            for key, value in input_dict.items():
+                if torch.is_tensor(value):
+                    print(f"{key}: {value.mean().item():.4f} ± {value.std().item():.4f}")       
         
         return mask_loss
         

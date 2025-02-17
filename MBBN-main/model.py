@@ -130,7 +130,8 @@ class BaseModel(nn.Module, ABC):
         self.ablation = kwargs.get('ablation') 
         
         if self.transfer_learning or self.finetune_test:
-            self.sequence_length += (464-self.sequence_length)
+            # self.sequence_length += (464-self.sequence_length)
+            self.sequence_length = 700  # for ENIGMA-OCD pretraining -> ENIGMA-OCD finetuning
             
         if kwargs.get('fmri_type') == 'divided_timeseries':
             self.BertConfig = BertConfig(hidden_size=self.intermediate_vec, vocab_size=1,
@@ -147,7 +148,13 @@ class BaseModel(nn.Module, ABC):
         self.use_cuda = kwargs.get('gpu') #'cuda'
         self.dataset_name = kwargs.get('dataset_name')
 
-    def load_partial_state_dict(self, state_dict,load_cls_embedding):
+    def load_partial_state_dict(self, state_dict, load_cls_embedding):
+
+        ##### DEBUG #####
+        # for name, param in self.state_dict().items():
+        #     print(name, param.shape)
+        #################
+
         print('loading parameters onto new model...')
         own_state = self.state_dict()
         loaded = {name:False for name in own_state.keys()}
@@ -160,6 +167,9 @@ class BaseModel(nn.Module, ABC):
             elif 'position' in name and param.shape != own_state[name].shape:
                 print('debug line above')
                 continue
+            if param.shape != own_state[name].shape:
+                print(f'Mismatch in {name}: checkpoint shape {param.shape} vs model shape {own_state[name].shape}')
+                
             param = param.data
             own_state[name].copy_(param)
             loaded[name] = True
@@ -451,63 +461,63 @@ class Transformer_Finetune_Four_Channels(BaseModel):
             
     def forward(self, x_1, x_2, x_3, x_4, mask=None):
 
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):  # for speed up
+        # with torch.autocast(device_type="cuda", dtype=torch.bfloat16):  # for speed up
 
-            if self.ablation == 'convolution':
-                x_1 = self.cnn(x_1)
-                x_2 = self.cnn(x_2)
-                x_3 = self.cnn(x_3)
-                x_4 = self.cnn(x_4)
+        if self.ablation == 'convolution':
+            x_1 = self.cnn(x_1)
+            x_2 = self.cnn(x_2)
+            x_3 = self.cnn(x_3)
+            x_4 = self.cnn(x_4)
 
-            # 01 get dict
-            if self.spatiotemporal:  
-                
-                # temporal
-                transformer_dict_imf1 = self.transformer(x_1, mask=mask)
-                transformer_dict_imf2 = self.transformer(x_2, mask=mask)
-                transformer_dict_imf3 = self.transformer(x_3, mask=mask)
-                transformer_dict_imf4 = self.transformer(x_4, mask=mask)
-                
-                # spatial
-                imf1_spatial_attention = self.imf1_spatial_attention(x_1.permute(0, 2, 1), mask=mask) # (batch, ROI, sequence length)
-                imf2_spatial_attention = self.imf2_spatial_attention(x_2.permute(0, 2, 1), mask=mask) # (batch, ROI, sequence length)
-                imf3_spatial_attention = self.imf3_spatial_attention(x_3.permute(0, 2, 1), mask=mask) # (batch, ROI, sequence length)
-                imf4_spatial_attention = self.imf4_spatial_attention(x_4.permute(0, 2, 1), mask=mask) # (batch, ROI, sequence length)
-                # desired output shape : (batch, num_heads, ROI, ROI)
+        # 01 get dict
+        if self.spatiotemporal:  
             
-            else:
-
-                # temporal #
-                transformer_dict_imf1 = self.transformer(x_1)
-                transformer_dict_imf2 = self.transformer(x_2)
-                transformer_dict_imf3 = self.transformer(x_3)
-                transformer_dict_imf4 = self.transformer(x_4)
-                
-            # 02 get pooled_cls
-            out_cls_imf1 = transformer_dict_imf1['cls']
-            out_cls_imf2 = transformer_dict_imf2['cls']
-            out_cls_imf3 = transformer_dict_imf3['cls']
-            out_cls_imf4 = transformer_dict_imf4['cls']
-
-            pred_imf1 = self.regression_head(out_cls_imf1)
-            pred_imf2 = self.regression_head(out_cls_imf2)
-            pred_imf3 = self.regression_head(out_cls_imf3)
-            pred_imf4 = self.regression_head(out_cls_imf4)
-                
-            prediction = (pred_imf1 + pred_imf2 + pred_imf3 + pred_imf4) / 4
+            # temporal
+            transformer_dict_imf1 = self.transformer(x_1, mask=mask)
+            transformer_dict_imf2 = self.transformer(x_2, mask=mask)
+            transformer_dict_imf3 = self.transformer(x_3, mask=mask)
+            transformer_dict_imf4 = self.transformer(x_4, mask=mask)
             
-            if self.visualization:
-                ans_dict = prediction
-            else:
-                if self.spatiotemporal:
-                    ans_dict = {self.task:prediction, 
-                                'imf1_spatial_attention':imf1_spatial_attention, 
-                                'imf2_spatial_attention':imf2_spatial_attention, 
-                                'imf3_spatial_attention':imf3_spatial_attention,
-                                'imf4_spatial_attention':imf4_spatial_attention}
-                else:
-                    ans_dict = {self.task:prediction}
+            # spatial
+            imf1_spatial_attention = self.imf1_spatial_attention(x_1.permute(0, 2, 1), mask=mask) # (batch, ROI, sequence length)
+            imf2_spatial_attention = self.imf2_spatial_attention(x_2.permute(0, 2, 1), mask=mask) # (batch, ROI, sequence length)
+            imf3_spatial_attention = self.imf3_spatial_attention(x_3.permute(0, 2, 1), mask=mask) # (batch, ROI, sequence length)
+            imf4_spatial_attention = self.imf4_spatial_attention(x_4.permute(0, 2, 1), mask=mask) # (batch, ROI, sequence length)
+            # desired output shape : (batch, num_heads, ROI, ROI)
         
+        else:
+
+            # temporal #
+            transformer_dict_imf1 = self.transformer(x_1)
+            transformer_dict_imf2 = self.transformer(x_2)
+            transformer_dict_imf3 = self.transformer(x_3)
+            transformer_dict_imf4 = self.transformer(x_4)
+            
+        # 02 get pooled_cls
+        out_cls_imf1 = transformer_dict_imf1['cls']
+        out_cls_imf2 = transformer_dict_imf2['cls']
+        out_cls_imf3 = transformer_dict_imf3['cls']
+        out_cls_imf4 = transformer_dict_imf4['cls']
+
+        pred_imf1 = self.regression_head(out_cls_imf1)
+        pred_imf2 = self.regression_head(out_cls_imf2)
+        pred_imf3 = self.regression_head(out_cls_imf3)
+        pred_imf4 = self.regression_head(out_cls_imf4)
+            
+        prediction = (pred_imf1 + pred_imf2 + pred_imf3 + pred_imf4) / 4
+        
+        if self.visualization:
+            ans_dict = prediction
+        else:
+            if self.spatiotemporal:
+                ans_dict = {self.task:prediction, 
+                            'imf1_spatial_attention':imf1_spatial_attention, 
+                            'imf2_spatial_attention':imf2_spatial_attention, 
+                            'imf3_spatial_attention':imf3_spatial_attention,
+                            'imf4_spatial_attention':imf4_spatial_attention}
+            else:
+                ans_dict = {self.task:prediction}
+    
         return ans_dict
     
 class Transformer_Finetune_Five_Channels(BaseModel):
@@ -948,60 +958,186 @@ class Transformer_Reconstruction_Four_Channels(BaseModel):
         
     def forward(self, x_1, x_2, x_3, x_4, seq_mask=None):
 
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):  # for speed up
+        # with torch.autocast(device_type="cuda", dtype=torch.bfloat16):  # for speed up
 
-            ans_dict = {}
+        ans_dict = {}
+        
+        if self.spatiotemporal:
+            ## spatial loss ##
+            imf1_spatial_attention = self.imf1_spatial_attention(x_1.permute(0, 2, 1), mask=seq_mask) # (batch, ROI, sequence length)
+            imf2_spatial_attention = self.imf2_spatial_attention(x_2.permute(0, 2, 1), mask=seq_mask) # (batch, ROI, sequence length)
+            imf3_spatial_attention = self.imf3_spatial_attention(x_3.permute(0, 2, 1), mask=seq_mask) # (batch, ROI, sequence length)
+            imf4_spatial_attention = self.imf4_spatial_attention(x_4.permute(0, 2, 1), mask=seq_mask) # (batch, ROI, sequence length)
+            # desired output shape : (batch, num_heads, ROI, ROI)
             
-            if self.spatiotemporal:
-                ## spatial loss ##
-                imf1_spatial_attention = self.imf1_spatial_attention(x_1.permute(0, 2, 1), mask=seq_mask) # (batch, ROI, sequence length)
-                imf2_spatial_attention = self.imf2_spatial_attention(x_2.permute(0, 2, 1), mask=seq_mask) # (batch, ROI, sequence length)
-                imf3_spatial_attention = self.imf3_spatial_attention(x_3.permute(0, 2, 1), mask=seq_mask) # (batch, ROI, sequence length)
-                imf4_spatial_attention = self.imf4_spatial_attention(x_4.permute(0, 2, 1), mask=seq_mask) # (batch, ROI, sequence length)
-                # desired output shape : (batch, num_heads, ROI, ROI)
+            ans_dict['imf1_spatial_attention'] = imf1_spatial_attention
+            ans_dict['imf2_spatial_attention'] = imf2_spatial_attention
+            ans_dict['imf3_spatial_attention'] = imf3_spatial_attention
+            ans_dict['imf4_spatial_attention'] = imf4_spatial_attention
+            
+        if self.mask_loss:
+            if not (self.temporal_masking_type == 'spatiotemporal' and self.spatiotemporal_masking_type == 'separate'):
+                masked_seq_imf1 = x_1
+                masked_seq_imf2 = x_2
+                masked_seq_imf3 = x_3
+                masked_seq_imf4 = x_4
+
+            batch_size = x_1.shape[0]
+
+            if self.masking_method == 'temporal':
+                if self.temporal_masking_type == 'single_point':
+                    number = int(self.sequence_length * self.masking_rate)
+                    mask_list = np.random.randint(0, self.sequence_length, size=number)
+                    for mask in mask_list:
+                        # generate masked sequence
+                        masked_seq_imf1[:, mask:mask+1, :] = torch.zeros(batch_size, 1, self.intermediate_vec)
+                        masked_seq_imf2[:, mask:mask+1, :] = torch.zeros(batch_size, 1, self.intermediate_vec)
+                        masked_seq_imf3[:, mask:mask+1, :] = torch.zeros(batch_size, 1, self.intermediate_vec)
+                        masked_seq_imf4[:, mask:mask+1, :] = torch.zeros(batch_size, 1, self.intermediate_vec)
+
+                    transformer_dict_imf1_mask = self.transformer(masked_seq_imf1, mask=seq_mask)
+                    mask_out_seq_imf1 = transformer_dict_imf1_mask['sequence']    
+                    transformer_dict_imf2_mask = self.transformer(masked_seq_imf2, mask=seq_mask)
+                    mask_out_seq_imf2 = transformer_dict_imf2_mask['sequence']   
+                    transformer_dict_imf3_mask = self.transformer(masked_seq_imf3, mask=seq_mask)
+                    mask_out_seq_imf3 = transformer_dict_imf3_mask['sequence']   
+                    transformer_dict_imf4_mask = self.transformer(masked_seq_imf4, mask=seq_mask)
+                    mask_out_seq_imf4 = transformer_dict_imf4_mask['sequence']   
+
+                    ans_dict['mask_single_point_imf1_fmri_sequence'] = mask_out_seq_imf1
+                    ans_dict['mask_single_point_imf2_fmri_sequence'] = mask_out_seq_imf2
+                    ans_dict['mask_single_point_imf3_fmri_sequence'] = mask_out_seq_imf3
+                    ans_dict['mask_single_point_imf4_fmri_sequence'] = mask_out_seq_imf4
+
+
+                if self.temporal_masking_type == 'time_window':
+                    mask_list = list(range(0, self.sequence_length, self.window_interval_rate*self.temporal_masking_window_size))
+                    if self.sequence_length - mask_list[-1] < self.temporal_masking_window_size:
+                        mask_list = mask_list[:-1]
+
+                    for mask in mask_list:
+                        masked_seq_imf1[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+                        masked_seq_imf2[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+                        masked_seq_imf3[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+                        masked_seq_imf4[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+
+                    transformer_dict_imf1_mask = self.transformer(masked_seq_imf1, mask=seq_mask)
+                    mask_out_seq_imf1 = transformer_dict_imf1_mask['sequence']    
+                    transformer_dict_imf2_mask = self.transformer(masked_seq_imf2, mask=seq_mask)
+                    mask_out_seq_imf2 = transformer_dict_imf2_mask['sequence']  
+                    transformer_dict_imf3_mask = self.transformer(masked_seq_imf3, mask=seq_mask)
+                    mask_out_seq_imf3 = transformer_dict_imf3_mask['sequence']  
+                    transformer_dict_imf4_mask = self.transformer(masked_seq_imf4, mask=seq_mask)
+                    mask_out_seq_imf4 = transformer_dict_imf4_mask['sequence']  
+
+                    ans_dict['mask_time_window_imf1_fmri_sequence'] = mask_out_seq_imf1
+                    ans_dict['mask_time_window_imf2_fmri_sequence'] = mask_out_seq_imf2
+                    ans_dict['mask_time_window_imf3_fmri_sequence'] = mask_out_seq_imf3
+                    ans_dict['mask_time_window_imf4_fmri_sequence'] = mask_out_seq_imf4
+            
+            elif self.masking_method == 'spatial':
+                if self.spatial_masking_type == 'hub_ROIs':
+                    pass
+                #     ##### ADD ENIGMA CODE #####
+                #     if self.intermediate_vec == 400:
+                #         high_comm_list = np.load('./data/communicability/UKB_high_comm_ROI_order_Schaefer400.npy')
+                #         low_comm_list = np.load('./data/communicability/UKB_low_comm_ROI_order_Schaefer400.npy')
+                #         ultralow_comm_list = np.load('./data/communicability/UKB_ultralow_comm_ROI_order_Schaefer400.npy')
+                #     elif self.intermediate_vec == 180:
+                #         high_comm_list = np.load('./data/communicability/UKB_high_comm_ROI_order_HCP_MMP1.npy')
+                #         low_comm_list = np.load('./data/communicability/UKB_low_comm_ROI_order_HCP_MMP1.npy')
+                #         ultralow_comm_list = np.load('./data/communicability/UKB_ultralow_comm_ROI_order_HCP_MMP1.npy')
+
+                #     if self.communicability_option == 'remove_high_comm_node':
+                #         high_mask_list = list(high_comm_list[-self.num_hub_ROIs:])
+                #         low_mask_list = list(low_comm_list[-self.num_hub_ROIs:])
+                #         ultralow_mask_list = list(ultralow_comm_list[-self.num_hub_ROIs:])
+                #     elif self.communicability_option == 'remove_low_comm_node':
+                #         high_mask_list = list(high_comm_list[:self.num_hub_ROIs])
+                #         low_mask_list = list(low_comm_list[:self.num_hub_ROIs])
+                #         ultralow_mask_list = list(ultralow_comm_list[:self.num_hub_ROIs])        
+                        
+                        
+                #     for mask in high_mask_list:
+                #         masked_seq_high[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                #     for mask in low_mask_list:
+                #         masked_seq_low[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                #     for mask in ultralow_mask_list:
+                #         masked_seq_ultralow[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                        
+                #     transformer_dict_high_mask = self.transformer(masked_seq_high)
+                #     mask_out_seq_high = transformer_dict_high_mask['sequence']    
+                #     transformer_dict_low_mask = self.transformer(masked_seq_low)
+                #     mask_out_seq_low = transformer_dict_low_mask['sequence']
+                #     transformer_dict_ultralow_mask = self.transformer(masked_seq_ultralow)
+                #     mask_out_seq_ultralow = transformer_dict_ultralow_mask['sequence']
+
+                #     ans_dict['mask_hub_ROIs_high_fmri_sequence'] = mask_out_seq_high
+                #     ans_dict['mask_hub_ROIs_low_fmri_sequence'] = mask_out_seq_low
+                #     ans_dict['mask_hub_ROIs_ultralow_fmri_sequence'] = mask_out_seq_ultralow
+                    
+                elif self.spatial_masking_type == 'random_ROIs':
+                    mask_list = random.sample(list(range(self.intermediate_vec)), self.num_random_ROIs)
+                    for mask in mask_list:
+                        masked_seq_imf1[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                        masked_seq_imf2[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                        masked_seq_imf3[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                        masked_seq_imf4[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                    
+                    transformer_dict_imf1_mask = self.transformer(masked_seq_imf1, mask=seq_mask)
+                    mask_out_seq_imf1 = transformer_dict_imf1_mask['sequence']    
+                    transformer_dict_imf2_mask = self.transformer(masked_seq_imf2, mask=seq_mask)
+                    mask_out_seq_imf2 = transformer_dict_imf2_mask['sequence'] 
+                    transformer_dict_imf3_mask = self.transformer(masked_seq_imf3, mask=seq_mask)
+                    mask_out_seq_imf3 = transformer_dict_imf3_mask['sequence'] 
+                    transformer_dict_imf4_mask = self.transformer(masked_seq_imf4, mask=seq_mask)
+                    mask_out_seq_imf4 = transformer_dict_imf4_mask['sequence'] 
+
+                    ans_dict['mask_hub_ROIs_imf1_fmri_sequence'] = mask_out_seq_imf1
+                    ans_dict['mask_hub_ROIs_imf2_fmri_sequence'] = mask_out_seq_imf2
+                    ans_dict['mask_hub_ROIs_imf3_fmri_sequence'] = mask_out_seq_imf3
+                    ans_dict['mask_hub_ROIs_imf4_fmri_sequence'] = mask_out_seq_imf4
+                    
+            else: #spatiotemporal#
+                if self.spatial_masking_type == 'hub_ROIs': 
                 
-                ans_dict['imf1_spatial_attention'] = imf1_spatial_attention
-                ans_dict['imf2_spatial_attention'] = imf2_spatial_attention
-                ans_dict['imf3_spatial_attention'] = imf3_spatial_attention
-                ans_dict['imf4_spatial_attention'] = imf4_spatial_attention
-                
-            if self.mask_loss:
-                if not (self.temporal_masking_type == 'spatiotemporal' and self.spatiotemporal_masking_type == 'separate'):
-                    masked_seq_imf1 = x_1
-                    masked_seq_imf2 = x_2
-                    masked_seq_imf3 = x_3
-                    masked_seq_imf4 = x_4
+                    if self.intermediate_vec == 400:
+                        high_comm_list = np.load('./data/communicability/UKB_high_comm_ROI_order_Schaefer400.npy')
+                        low_comm_list = np.load('./data/communicability/UKB_low_comm_ROI_order_Schaefer400.npy')
+                        ultralow_comm_list = np.load('./data/communicability/UKB_ultralow_comm_ROI_order_Schaefer400.npy')
+                    elif self.intermediate_vec == 180:
+                        high_comm_list = np.load('./data/communicability/UKB_high_comm_ROI_order_HCP_MMP1.npy')
+                        low_comm_list = np.load('./data/communicability/UKB_low_comm_ROI_order_HCP_MMP1.npy')
+                        ultralow_comm_list = np.load('./data/communicability/UKB_ultralow_comm_ROI_order_HCP_MMP1.npy')
+                    elif self.intermediate_vec == 316:
+                        imf1_comm_list = np.load('./data/communicability/ENIGMA_OCD_imf1_comm_ROI_order_316.npy')
+                        imf2_comm_list = np.load('./data/communicability/ENIGMA_OCD_imf2_comm_ROI_order_316.npy')
+                        imf3_comm_list = np.load('./data/communicability/ENIGMA_OCD_imf3_comm_ROI_order_316.npy')
+                        imf4_comm_list = np.load('./data/communicability/ENIGMA_OCD_imf4_comm_ROI_order_316.npy')
 
-                batch_size = x_1.shape[0]
+                    if self.communicability_option == 'remove_high_comm_node':
+                        imf1_mask_list = list(imf1_comm_list[-self.num_hub_ROIs:])
+                        imf2_mask_list = list(imf2_comm_list[-self.num_hub_ROIs:])
+                        imf3_mask_list = list(imf3_comm_list[-self.num_hub_ROIs:])
+                        imf4_mask_list = list(imf4_comm_list[-self.num_hub_ROIs:])
+                    elif self.communicability_option == 'remove_low_comm_node':
+                        imf1_mask_list = list(imf1_comm_list[:self.num_hub_ROIs])
+                        imf2_mask_list = list(imf2_comm_list[:self.num_hub_ROIs])
+                        imf3_mask_list = list(imf3_comm_list[:self.num_hub_ROIs])
+                        imf4_mask_list = list(imf4_comm_list[:self.num_hub_ROIs])
 
-                if self.masking_method == 'temporal':
-                    if self.temporal_masking_type == 'single_point':
-                        number = int(self.sequence_length * self.masking_rate)
-                        mask_list = np.random.randint(0, self.sequence_length, size=number)
-                        for mask in mask_list:
-                            # generate masked sequence
-                            masked_seq_imf1[:, mask:mask+1, :] = torch.zeros(batch_size, 1, self.intermediate_vec)
-                            masked_seq_imf2[:, mask:mask+1, :] = torch.zeros(batch_size, 1, self.intermediate_vec)
-                            masked_seq_imf3[:, mask:mask+1, :] = torch.zeros(batch_size, 1, self.intermediate_vec)
-                            masked_seq_imf4[:, mask:mask+1, :] = torch.zeros(batch_size, 1, self.intermediate_vec)
+                    if self.spatiotemporal_masking_type == 'whole':       
+                        for mask in imf1_mask_list:
+                            masked_seq_imf1[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                        for mask in imf2_mask_list:
+                            masked_seq_imf2[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                        for mask in imf3_mask_list:
+                            masked_seq_imf3[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                        for mask in imf4_mask_list:
+                            masked_seq_imf4[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
 
-                        transformer_dict_imf1_mask = self.transformer(masked_seq_imf1, mask=seq_mask)
-                        mask_out_seq_imf1 = transformer_dict_imf1_mask['sequence']    
-                        transformer_dict_imf2_mask = self.transformer(masked_seq_imf2, mask=seq_mask)
-                        mask_out_seq_imf2 = transformer_dict_imf2_mask['sequence']   
-                        transformer_dict_imf3_mask = self.transformer(masked_seq_imf3, mask=seq_mask)
-                        mask_out_seq_imf3 = transformer_dict_imf3_mask['sequence']   
-                        transformer_dict_imf4_mask = self.transformer(masked_seq_imf4, mask=seq_mask)
-                        mask_out_seq_imf4 = transformer_dict_imf4_mask['sequence']   
-
-                        ans_dict['mask_single_point_imf1_fmri_sequence'] = mask_out_seq_imf1
-                        ans_dict['mask_single_point_imf2_fmri_sequence'] = mask_out_seq_imf2
-                        ans_dict['mask_single_point_imf3_fmri_sequence'] = mask_out_seq_imf3
-                        ans_dict['mask_single_point_imf4_fmri_sequence'] = mask_out_seq_imf4
-
-
-                    if self.temporal_masking_type == 'time_window':
                         mask_list = list(range(0, self.sequence_length, self.window_interval_rate*self.temporal_masking_window_size))
+
                         if self.sequence_length - mask_list[-1] < self.temporal_masking_window_size:
                             mask_list = mask_list[:-1]
 
@@ -1014,285 +1150,171 @@ class Transformer_Reconstruction_Four_Channels(BaseModel):
                         transformer_dict_imf1_mask = self.transformer(masked_seq_imf1, mask=seq_mask)
                         mask_out_seq_imf1 = transformer_dict_imf1_mask['sequence']    
                         transformer_dict_imf2_mask = self.transformer(masked_seq_imf2, mask=seq_mask)
-                        mask_out_seq_imf2 = transformer_dict_imf2_mask['sequence']  
+                        mask_out_seq_imf2 = transformer_dict_imf2_mask['sequence']    
                         transformer_dict_imf3_mask = self.transformer(masked_seq_imf3, mask=seq_mask)
-                        mask_out_seq_imf3 = transformer_dict_imf3_mask['sequence']  
+                        mask_out_seq_imf3 = transformer_dict_imf3_mask['sequence']    
                         transformer_dict_imf4_mask = self.transformer(masked_seq_imf4, mask=seq_mask)
-                        mask_out_seq_imf4 = transformer_dict_imf4_mask['sequence']  
+                        mask_out_seq_imf4 = transformer_dict_imf4_mask['sequence']    
 
-                        ans_dict['mask_time_window_imf1_fmri_sequence'] = mask_out_seq_imf1
-                        ans_dict['mask_time_window_imf2_fmri_sequence'] = mask_out_seq_imf2
-                        ans_dict['mask_time_window_imf3_fmri_sequence'] = mask_out_seq_imf3
-                        ans_dict['mask_time_window_imf4_fmri_sequence'] = mask_out_seq_imf4
-                
-                elif self.masking_method == 'spatial':
-                    if self.spatial_masking_type == 'hub_ROIs':
-                        pass
-                    #     ##### ADD ENIGMA CODE #####
-                    #     if self.intermediate_vec == 400:
-                    #         high_comm_list = np.load('./data/communicability/UKB_high_comm_ROI_order_Schaefer400.npy')
-                    #         low_comm_list = np.load('./data/communicability/UKB_low_comm_ROI_order_Schaefer400.npy')
-                    #         ultralow_comm_list = np.load('./data/communicability/UKB_ultralow_comm_ROI_order_Schaefer400.npy')
-                    #     elif self.intermediate_vec == 180:
-                    #         high_comm_list = np.load('./data/communicability/UKB_high_comm_ROI_order_HCP_MMP1.npy')
-                    #         low_comm_list = np.load('./data/communicability/UKB_low_comm_ROI_order_HCP_MMP1.npy')
-                    #         ultralow_comm_list = np.load('./data/communicability/UKB_ultralow_comm_ROI_order_HCP_MMP1.npy')
-
-                    #     if self.communicability_option == 'remove_high_comm_node':
-                    #         high_mask_list = list(high_comm_list[-self.num_hub_ROIs:])
-                    #         low_mask_list = list(low_comm_list[-self.num_hub_ROIs:])
-                    #         ultralow_mask_list = list(ultralow_comm_list[-self.num_hub_ROIs:])
-                    #     elif self.communicability_option == 'remove_low_comm_node':
-                    #         high_mask_list = list(high_comm_list[:self.num_hub_ROIs])
-                    #         low_mask_list = list(low_comm_list[:self.num_hub_ROIs])
-                    #         ultralow_mask_list = list(ultralow_comm_list[:self.num_hub_ROIs])        
-                            
-                            
-                    #     for mask in high_mask_list:
-                    #         masked_seq_high[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                    #     for mask in low_mask_list:
-                    #         masked_seq_low[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                    #     for mask in ultralow_mask_list:
-                    #         masked_seq_ultralow[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                            
-                    #     transformer_dict_high_mask = self.transformer(masked_seq_high)
-                    #     mask_out_seq_high = transformer_dict_high_mask['sequence']    
-                    #     transformer_dict_low_mask = self.transformer(masked_seq_low)
-                    #     mask_out_seq_low = transformer_dict_low_mask['sequence']
-                    #     transformer_dict_ultralow_mask = self.transformer(masked_seq_ultralow)
-                    #     mask_out_seq_ultralow = transformer_dict_ultralow_mask['sequence']
-
-                    #     ans_dict['mask_hub_ROIs_high_fmri_sequence'] = mask_out_seq_high
-                    #     ans_dict['mask_hub_ROIs_low_fmri_sequence'] = mask_out_seq_low
-                    #     ans_dict['mask_hub_ROIs_ultralow_fmri_sequence'] = mask_out_seq_ultralow
+                        ans_dict['mask_spatiotemporal_imf1_fmri_sequence'] = mask_out_seq_imf1
+                        ans_dict['mask_spatiotemporal_imf2_fmri_sequence'] = mask_out_seq_imf2
+                        ans_dict['mask_spatiotemporal_imf3_fmri_sequence'] = mask_out_seq_imf3
+                        ans_dict['mask_spatiotemporal_imf4_fmri_sequence'] = mask_out_seq_imf4
+                    
+                    # elif self.spatiotemporal_masking_type == 'separate':
+                    #     # temporal masking
+                    #     temporal_masked_seq_high = x_h
+                    #     temporal_masked_seq_low = x_l
+                    #     temporal_masked_seq_ultralow = x_u
                         
-                    elif self.spatial_masking_type == 'random_ROIs':
-                        mask_list = random.sample(list(range(self.intermediate_vec)), self.num_random_ROIs)
-                        for mask in mask_list:
+                    #     mask_list = list(range(0, self.sequence_length, self.window_interval_rate*self.temporal_masking_window_size))
+
+                    #     if self.sequence_length - mask_list[-1] < self.temporal_masking_window_size:
+                    #         mask_list = mask_list[:-1]
+
+                    #     for mask in mask_list:
+                    #         temporal_masked_seq_high[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+                    #         temporal_masked_seq_low[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+                    #         temporal_masked_seq_ultralow[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+                            
+                        
+                    #     transformer_dict_high_mask = self.transformer(temporal_masked_seq_high)
+                    #     temporal_mask_out_seq_high = transformer_dict_high_mask['sequence']    
+                    #     transformer_dict_low_mask = self.transformer(temporal_masked_seq_low)
+                    #     temporal_mask_out_seq_low = transformer_dict_low_mask['sequence']
+                    #     transformer_dict_ultralow_mask = self.transformer(temporal_masked_seq_ultralow)
+                    #     temporal_mask_out_seq_ultralow = transformer_dict_ultralow_mask['sequence']
+
+                    #     ans_dict['temporal_mask_spatiotemporal_high_fmri_sequence'] = temporal_mask_out_seq_high
+                    #     ans_dict['temporal_mask_spatiotemporal_low_fmri_sequence'] = temporal_mask_out_seq_low
+                    #     ans_dict['temporal_mask_spatiotemporal_ultralow_fmri_sequence'] = temporal_mask_out_seq_ultralow
+
+                        
+                    #     # spatial masking
+                        
+                    #     spatial_masked_seq_high = x_h
+                    #     spatial_masked_seq_low = x_l
+                    #     spatial_masked_seq_ultralow = x_u
+                        
+                    #     for mask in high_mask_list:
+                    #         spatial_masked_seq_high[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                    #     for mask in low_mask_list:
+                    #         spatial_masked_seq_low[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                    #     for mask in ultralow_mask_list:
+                    #         spatial_masked_seq_ultralow[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                            
+                    #     transformer_dict_high_mask = self.transformer(spatial_masked_seq_high)
+                    #     spatial_mask_out_seq_high = transformer_dict_high_mask['sequence']    
+                    #     transformer_dict_low_mask = self.transformer(spatial_masked_seq_low)
+                    #     spatial_mask_out_seq_low = transformer_dict_low_mask['sequence']
+                    #     transformer_dict_ultralow_mask = self.transformer(spatial_masked_seq_ultralow)
+                    #     spatial_mask_out_seq_ultralow = transformer_dict_ultralow_mask['sequence']
+
+                    #     ans_dict['spatial_mask_spatiotemporal_high_fmri_sequence'] = spatial_mask_out_seq_high
+                    #     ans_dict['spatial_mask_spatiotemporal_low_fmri_sequence'] = spatial_mask_out_seq_low
+                    #     ans_dict['spatial_mask_spatiotemporal_ultralow_fmri_sequence'] = spatial_mask_out_seq_ultralow 
+
+                elif self.spatial_masking_type == 'random_ROIs': ### DEBUG ###
+                    mask_list_rand = random.sample(list(range(self.intermediate_vec)), self.num_random_ROIs)
+
+                    if self.spatiotemporal_masking_type == 'whole':       
+                        for mask in mask_list_rand:
                             masked_seq_imf1[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
                             masked_seq_imf2[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
                             masked_seq_imf3[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
                             masked_seq_imf4[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                        
+
+                        mask_list = list(range(0, self.sequence_length, self.window_interval_rate*self.temporal_masking_window_size))
+
+                        if self.sequence_length - mask_list[-1] < self.temporal_masking_window_size:
+                            mask_list = mask_list[:-1]
+
+                        for mask in mask_list:
+                            masked_seq_imf1[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+                            masked_seq_imf2[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+                            masked_seq_imf3[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+                            masked_seq_imf4[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+
                         transformer_dict_imf1_mask = self.transformer(masked_seq_imf1, mask=seq_mask)
                         mask_out_seq_imf1 = transformer_dict_imf1_mask['sequence']    
                         transformer_dict_imf2_mask = self.transformer(masked_seq_imf2, mask=seq_mask)
-                        mask_out_seq_imf2 = transformer_dict_imf2_mask['sequence'] 
+                        mask_out_seq_imf2 = transformer_dict_imf2_mask['sequence']   
                         transformer_dict_imf3_mask = self.transformer(masked_seq_imf3, mask=seq_mask)
-                        mask_out_seq_imf3 = transformer_dict_imf3_mask['sequence'] 
+                        mask_out_seq_imf3 = transformer_dict_imf3_mask['sequence']   
                         transformer_dict_imf4_mask = self.transformer(masked_seq_imf4, mask=seq_mask)
-                        mask_out_seq_imf4 = transformer_dict_imf4_mask['sequence'] 
+                        mask_out_seq_imf4 = transformer_dict_imf4_mask['sequence']   
 
-                        ans_dict['mask_hub_ROIs_imf1_fmri_sequence'] = mask_out_seq_imf1
-                        ans_dict['mask_hub_ROIs_imf2_fmri_sequence'] = mask_out_seq_imf2
-                        ans_dict['mask_hub_ROIs_imf3_fmri_sequence'] = mask_out_seq_imf3
-                        ans_dict['mask_hub_ROIs_imf4_fmri_sequence'] = mask_out_seq_imf4
-                        
-                else: #spatiotemporal#
-                    if self.spatial_masking_type == 'hub_ROIs': ### DEBUG ###
-                        pass
+                        ans_dict['mask_spatiotemporal_imf1_fmri_sequence'] = mask_out_seq_imf1
+                        ans_dict['mask_spatiotemporal_imf2_fmri_sequence'] = mask_out_seq_imf2
+                        ans_dict['mask_spatiotemporal_imf3_fmri_sequence'] = mask_out_seq_imf3
+                        ans_dict['mask_spatiotemporal_imf4_fmri_sequence'] = mask_out_seq_imf4
                     
-                    #     if self.intermediate_vec == 400:
-                    #         high_comm_list = np.load('./data/communicability/UKB_high_comm_ROI_order_Schaefer400.npy')
-                    #         low_comm_list = np.load('./data/communicability/UKB_low_comm_ROI_order_Schaefer400.npy')
-                    #         ultralow_comm_list = np.load('./data/communicability/UKB_ultralow_comm_ROI_order_Schaefer400.npy')
-                    #     elif self.intermediate_vec == 180:
-                    #         high_comm_list = np.load('./data/communicability/UKB_high_comm_ROI_order_HCP_MMP1.npy')
-                    #         low_comm_list = np.load('./data/communicability/UKB_low_comm_ROI_order_HCP_MMP1.npy')
-                    #         ultralow_comm_list = np.load('./data/communicability/UKB_ultralow_comm_ROI_order_HCP_MMP1.npy')
-
-                    #     if self.communicability_option == 'remove_high_comm_node':
-                    #         high_mask_list = list(high_comm_list[-self.num_hub_ROIs:])
-                    #         low_mask_list = list(low_comm_list[-self.num_hub_ROIs:])
-                    #         ultralow_mask_list = list(ultralow_comm_list[-self.num_hub_ROIs:])
-                    #     elif self.communicability_option == 'remove_low_comm_node':
-                    #         high_mask_list = list(high_comm_list[:self.num_hub_ROIs])
-                    #         low_mask_list = list(low_comm_list[:self.num_hub_ROIs])
-                    #         ultralow_mask_list = list(ultralow_comm_list[:self.num_hub_ROIs]) 
-
-                    #     if self.spatiotemporal_masking_type == 'whole':       
-                    #         for mask in high_mask_list:
-                    #             masked_seq_high[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                    #         for mask in low_mask_list:
-                    #             masked_seq_low[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                    #         for mask in ultralow_mask_list:
-                    #             masked_seq_ultralow[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-
-                    #         mask_list = list(range(0, self.sequence_length, self.window_interval_rate*self.temporal_masking_window_size))
-
-                    #         if self.sequence_length - mask_list[-1] < self.temporal_masking_window_size:
-                    #             mask_list = mask_list[:-1]
-
-                    #         for mask in mask_list:
-                    #             masked_seq_high[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-                    #             masked_seq_low[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-                    #             masked_seq_ultralow[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-
-                    #         transformer_dict_high_mask = self.transformer(masked_seq_high)
-                    #         mask_out_seq_high = transformer_dict_high_mask['sequence']    
-                    #         transformer_dict_low_mask = self.transformer(masked_seq_low)
-                    #         mask_out_seq_low = transformer_dict_low_mask['sequence']
-                    #         transformer_dict_ultralow_mask = self.transformer(masked_seq_ultralow)
-                    #         mask_out_seq_ultralow = transformer_dict_ultralow_mask['sequence']
-
-                    #         ans_dict['mask_spatiotemporal_high_fmri_sequence'] = mask_out_seq_high
-                    #         ans_dict['mask_spatiotemporal_low_fmri_sequence'] = mask_out_seq_low
-                    #         ans_dict['mask_spatiotemporal_ultralow_fmri_sequence'] = mask_out_seq_ultralow
+                    # elif self.spatiotemporal_masking_type == 'separate':
+                    #     # temporal masking
+                    #     temporal_masked_seq_high = x_h
+                    #     temporal_masked_seq_low = x_l
+                    #     temporal_masked_seq_ultralow = x_u
                         
-                    #     elif self.spatiotemporal_masking_type == 'separate':
-                    #         # temporal masking
-                    #         temporal_masked_seq_high = x_h
-                    #         temporal_masked_seq_low = x_l
-                    #         temporal_masked_seq_ultralow = x_u
+                    #     mask_list = list(range(0, self.sequence_length, self.window_interval_rate*self.temporal_masking_window_size))
+
+                    #     if self.sequence_length - mask_list[-1] < self.temporal_masking_window_size:
+                    #         mask_list = mask_list[:-1]
+
+                    #     for mask in mask_list:
+                    #         temporal_masked_seq_high[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+                    #         temporal_masked_seq_low[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
+                    #         temporal_masked_seq_ultralow[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
                             
-                    #         mask_list = list(range(0, self.sequence_length, self.window_interval_rate*self.temporal_masking_window_size))
-
-                    #         if self.sequence_length - mask_list[-1] < self.temporal_masking_window_size:
-                    #             mask_list = mask_list[:-1]
-
-                    #         for mask in mask_list:
-                    #             temporal_masked_seq_high[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-                    #             temporal_masked_seq_low[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-                    #             temporal_masked_seq_ultralow[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-                                
-                            
-                    #         transformer_dict_high_mask = self.transformer(temporal_masked_seq_high)
-                    #         temporal_mask_out_seq_high = transformer_dict_high_mask['sequence']    
-                    #         transformer_dict_low_mask = self.transformer(temporal_masked_seq_low)
-                    #         temporal_mask_out_seq_low = transformer_dict_low_mask['sequence']
-                    #         transformer_dict_ultralow_mask = self.transformer(temporal_masked_seq_ultralow)
-                    #         temporal_mask_out_seq_ultralow = transformer_dict_ultralow_mask['sequence']
-
-                    #         ans_dict['temporal_mask_spatiotemporal_high_fmri_sequence'] = temporal_mask_out_seq_high
-                    #         ans_dict['temporal_mask_spatiotemporal_low_fmri_sequence'] = temporal_mask_out_seq_low
-                    #         ans_dict['temporal_mask_spatiotemporal_ultralow_fmri_sequence'] = temporal_mask_out_seq_ultralow
-
-                            
-                    #         # spatial masking
-                            
-                    #         spatial_masked_seq_high = x_h
-                    #         spatial_masked_seq_low = x_l
-                    #         spatial_masked_seq_ultralow = x_u
-                            
-                    #         for mask in high_mask_list:
-                    #             spatial_masked_seq_high[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                    #         for mask in low_mask_list:
-                    #             spatial_masked_seq_low[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                    #         for mask in ultralow_mask_list:
-                    #             spatial_masked_seq_ultralow[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                                
-                    #         transformer_dict_high_mask = self.transformer(spatial_masked_seq_high)
-                    #         spatial_mask_out_seq_high = transformer_dict_high_mask['sequence']    
-                    #         transformer_dict_low_mask = self.transformer(spatial_masked_seq_low)
-                    #         spatial_mask_out_seq_low = transformer_dict_low_mask['sequence']
-                    #         transformer_dict_ultralow_mask = self.transformer(spatial_masked_seq_ultralow)
-                    #         spatial_mask_out_seq_ultralow = transformer_dict_ultralow_mask['sequence']
-
-                    #         ans_dict['spatial_mask_spatiotemporal_high_fmri_sequence'] = spatial_mask_out_seq_high
-                    #         ans_dict['spatial_mask_spatiotemporal_low_fmri_sequence'] = spatial_mask_out_seq_low
-                    #         ans_dict['spatial_mask_spatiotemporal_ultralow_fmri_sequence'] = spatial_mask_out_seq_ultralow 
-
-                    elif self.spatial_masking_type == 'random_ROIs': ### DEBUG ###
-                        mask_list_rand = random.sample(list(range(self.intermediate_vec)), self.num_random_ROIs)
-
-                        if self.spatiotemporal_masking_type == 'whole':       
-                            for mask in mask_list_rand:
-                                masked_seq_imf1[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                                masked_seq_imf2[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                                masked_seq_imf3[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                                masked_seq_imf4[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-
-                            mask_list = list(range(0, self.sequence_length, self.window_interval_rate*self.temporal_masking_window_size))
-
-                            if self.sequence_length - mask_list[-1] < self.temporal_masking_window_size:
-                                mask_list = mask_list[:-1]
-
-                            for mask in mask_list:
-                                masked_seq_imf1[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-                                masked_seq_imf2[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-                                masked_seq_imf3[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-                                masked_seq_imf4[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-
-                            transformer_dict_imf1_mask = self.transformer(masked_seq_imf1, mask=seq_mask)
-                            mask_out_seq_imf1 = transformer_dict_imf1_mask['sequence']    
-                            transformer_dict_imf2_mask = self.transformer(masked_seq_imf2, mask=seq_mask)
-                            mask_out_seq_imf2 = transformer_dict_imf2_mask['sequence']   
-                            transformer_dict_imf3_mask = self.transformer(masked_seq_imf3, mask=seq_mask)
-                            mask_out_seq_imf3 = transformer_dict_imf3_mask['sequence']   
-                            transformer_dict_imf4_mask = self.transformer(masked_seq_imf4, mask=seq_mask)
-                            mask_out_seq_imf4 = transformer_dict_imf4_mask['sequence']   
-
-                            ans_dict['mask_spatiotemporal_imf1_fmri_sequence'] = mask_out_seq_imf1
-                            ans_dict['mask_spatiotemporal_imf2_fmri_sequence'] = mask_out_seq_imf2
-                            ans_dict['mask_spatiotemporal_imf3_fmri_sequence'] = mask_out_seq_imf3
-                            ans_dict['mask_spatiotemporal_imf4_fmri_sequence'] = mask_out_seq_imf4
                         
-                        # elif self.spatiotemporal_masking_type == 'separate':
-                        #     # temporal masking
-                        #     temporal_masked_seq_high = x_h
-                        #     temporal_masked_seq_low = x_l
-                        #     temporal_masked_seq_ultralow = x_u
-                            
-                        #     mask_list = list(range(0, self.sequence_length, self.window_interval_rate*self.temporal_masking_window_size))
+                    #     transformer_dict_high_mask = self.transformer(temporal_masked_seq_high)
+                    #     temporal_mask_out_seq_high = transformer_dict_high_mask['sequence']    
+                    #     transformer_dict_low_mask = self.transformer(temporal_masked_seq_low)
+                    #     temporal_mask_out_seq_low = transformer_dict_low_mask['sequence']
+                    #     transformer_dict_ultralow_mask = self.transformer(temporal_masked_seq_ultralow)
+                    #     temporal_mask_out_seq_ultralow = transformer_dict_ultralow_mask['sequence']
 
-                        #     if self.sequence_length - mask_list[-1] < self.temporal_masking_window_size:
-                        #         mask_list = mask_list[:-1]
+                    #     ans_dict['temporal_mask_spatiotemporal_high_fmri_sequence'] = temporal_mask_out_seq_high
+                    #     ans_dict['temporal_mask_spatiotemporal_low_fmri_sequence'] = temporal_mask_out_seq_low
+                    #     ans_dict['temporal_mask_spatiotemporal_ultralow_fmri_sequence'] = temporal_mask_out_seq_ultralow
 
-                        #     for mask in mask_list:
-                        #         temporal_masked_seq_high[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-                        #         temporal_masked_seq_low[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-                        #         temporal_masked_seq_ultralow[:, mask:mask+self.temporal_masking_window_size, :] = torch.zeros(batch_size, self.temporal_masking_window_size, self.intermediate_vec)
-                                
+                        
+                    #     # spatial masking
+                        
+                    #     spatial_masked_seq_high = x_h
+                    #     spatial_masked_seq_low = x_l
+                    #     spatial_masked_seq_ultralow = x_u
+                        
+                    #     for mask in high_mask_list:
+                    #         spatial_masked_seq_high[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                    #     for mask in low_mask_list:
+                    #         spatial_masked_seq_low[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
+                    #     for mask in ultralow_mask_list:
+                    #         spatial_masked_seq_ultralow[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
                             
-                        #     transformer_dict_high_mask = self.transformer(temporal_masked_seq_high)
-                        #     temporal_mask_out_seq_high = transformer_dict_high_mask['sequence']    
-                        #     transformer_dict_low_mask = self.transformer(temporal_masked_seq_low)
-                        #     temporal_mask_out_seq_low = transformer_dict_low_mask['sequence']
-                        #     transformer_dict_ultralow_mask = self.transformer(temporal_masked_seq_ultralow)
-                        #     temporal_mask_out_seq_ultralow = transformer_dict_ultralow_mask['sequence']
+                    #     transformer_dict_high_mask = self.transformer(spatial_masked_seq_high)
+                    #     spatial_mask_out_seq_high = transformer_dict_high_mask['sequence']    
+                    #     transformer_dict_low_mask = self.transformer(spatial_masked_seq_low)
+                    #     spatial_mask_out_seq_low = transformer_dict_low_mask['sequence']
+                    #     transformer_dict_ultralow_mask = self.transformer(spatial_masked_seq_ultralow)
+                    #     spatial_mask_out_seq_ultralow = transformer_dict_ultralow_mask['sequence']
 
-                        #     ans_dict['temporal_mask_spatiotemporal_high_fmri_sequence'] = temporal_mask_out_seq_high
-                        #     ans_dict['temporal_mask_spatiotemporal_low_fmri_sequence'] = temporal_mask_out_seq_low
-                        #     ans_dict['temporal_mask_spatiotemporal_ultralow_fmri_sequence'] = temporal_mask_out_seq_ultralow
-
-                            
-                        #     # spatial masking
-                            
-                        #     spatial_masked_seq_high = x_h
-                        #     spatial_masked_seq_low = x_l
-                        #     spatial_masked_seq_ultralow = x_u
-                            
-                        #     for mask in high_mask_list:
-                        #         spatial_masked_seq_high[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                        #     for mask in low_mask_list:
-                        #         spatial_masked_seq_low[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                        #     for mask in ultralow_mask_list:
-                        #         spatial_masked_seq_ultralow[:, :, mask:mask+1] = torch.zeros(batch_size, self.sequence_length, 1) # generate masked sequence
-                                
-                        #     transformer_dict_high_mask = self.transformer(spatial_masked_seq_high)
-                        #     spatial_mask_out_seq_high = transformer_dict_high_mask['sequence']    
-                        #     transformer_dict_low_mask = self.transformer(spatial_masked_seq_low)
-                        #     spatial_mask_out_seq_low = transformer_dict_low_mask['sequence']
-                        #     transformer_dict_ultralow_mask = self.transformer(spatial_masked_seq_ultralow)
-                        #     spatial_mask_out_seq_ultralow = transformer_dict_ultralow_mask['sequence']
-
-                        #     ans_dict['spatial_mask_spatiotemporal_high_fmri_sequence'] = spatial_mask_out_seq_high
-                        #     ans_dict['spatial_mask_spatiotemporal_low_fmri_sequence'] = spatial_mask_out_seq_low
-                        #     ans_dict['spatial_mask_spatiotemporal_ultralow_fmri_sequence'] = spatial_mask_out_seq_ultralow
-                            
-                            
-            # if self.recon_loss:
-            #     transformer_dict_high = self.transformer(x_h)
-            #     out_seq_high= transformer_dict_high['sequence']
-                
-            #     transformer_dict_low = self.transformer(x_l)
-            #     out_seq_low = transformer_dict_low['sequence']
-                
-            #     transformer_dict_ultralow = self.transformer(x_u)
-            #     out_seq_ultralow = transformer_dict_ultralow['sequence']
-                
-            #     ans_dict['reconstructed_high_fmri_sequence'] = out_seq_high
-            #     ans_dict['reconstructed_low_fmri_sequence'] = out_seq_low
-            #     ans_dict['reconstructed_ultralow_fmri_sequence'] = out_seq_ultralow
+                    #     ans_dict['spatial_mask_spatiotemporal_high_fmri_sequence'] = spatial_mask_out_seq_high
+                    #     ans_dict['spatial_mask_spatiotemporal_low_fmri_sequence'] = spatial_mask_out_seq_low
+                    #     ans_dict['spatial_mask_spatiotemporal_ultralow_fmri_sequence'] = spatial_mask_out_seq_ultralow
+                        
+                        
+        # if self.recon_loss:
+        #     transformer_dict_high = self.transformer(x_h)
+        #     out_seq_high= transformer_dict_high['sequence']
             
+        #     transformer_dict_low = self.transformer(x_l)
+        #     out_seq_low = transformer_dict_low['sequence']
+            
+        #     transformer_dict_ultralow = self.transformer(x_u)
+        #     out_seq_ultralow = transformer_dict_ultralow['sequence']
+            
+        #     ans_dict['reconstructed_high_fmri_sequence'] = out_seq_high
+        #     ans_dict['reconstructed_low_fmri_sequence'] = out_seq_low
+        #     ans_dict['reconstructed_ultralow_fmri_sequence'] = out_seq_ultralow
+        
         return ans_dict

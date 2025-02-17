@@ -1,0 +1,9 @@
+Best trial:
+  Value: 100000.0
+  Params:
+    lr_policy_phase3: step
+
+All trial results:
+Trial 0: Value = 100000.0, Params = {'lr_policy_phase3': 'step'}
+Trial 1: Value = 100000.0, Params = {'lr_policy_phase3': 'step'}
+Trial 2: Value = 100000.0, Params = {'lr_policy_phase3': 'step'}

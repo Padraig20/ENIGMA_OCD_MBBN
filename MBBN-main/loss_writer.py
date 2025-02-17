@@ -170,13 +170,13 @@ class Writer():
             # subj_dict['score'] denotes the logits for sequences for a subject
 
             ##### for speed up #####  
-            # subj_pred = subj_dict['score'].mean().item() 
-            # subj_error = subj_dict['score'].std().item()
-            # subj_truth = subj_dict['truth'].item()
+            subj_pred = subj_dict['score'].mean().item() 
+            subj_error = subj_dict['score'].std().item()
+            subj_truth = subj_dict['truth'].item()
             
-            subj_pred = float(subj_dict['score'].mean())
-            subj_error = float(subj_dict['score'].std())
-            subj_truth = float(subj_dict['truth'])
+            # subj_pred = float(subj_dict['score'].mean())
+            # subj_error = float(subj_dict['score'].std())
+            # subj_truth = float(subj_dict['truth'])
             ########################
 
             subj_mode = subj_dict['mode'] # train, val, test
