@@ -19,15 +19,15 @@
 # source mbbn/bin/activate
 # ./scripts/main_experiments/02_pretraining/pretrain-UKB_random.sh
 
-python main.py --dataset_name UKB  --ukb_path /pscratch/sd/p/pakmasha/UKB_304_ROIs --wandb_mode offline \
+python main.py --dataset_name UKB  --ukb_path /pscratch/sd/p/pakmasha/UKB_304_ROIs \
 --step 3 --batch_size_phase3 32 --lr_init_phase3 3e-5 \
 --workers_phase3 16 --target reconstruction \
 --fmri_type divided_timeseries --transformer_hidden_layers 8 \
 --seq_part head --fmri_dividing_type four_channels \
 --spatiotemporal --spat_diff_loss_type minus_log  --spatial_loss_factor 4.0 \
---exp_name pretraining_ukb_700_random_100roi_seed1_check --seed 1  --sequence_length_phase3 464 \
+--exp_name pretraining_ukb_464_random_290roi_seed1 --seed 1  --sequence_length_phase3 464 \
 --intermediate_vec 304 --nEpochs_phase3 1000 --num_heads 4 --filtering_type Boxcar \
---use_mask_loss --masking_method spatiotemporal --spatial_masking_type random_ROIs --num_random_ROIs 100 \
+--use_mask_loss --masking_method spatiotemporal --spatial_masking_type random_ROIs --num_random_ROIs 290 \
 --temporal_masking_type time_window --temporal_masking_window_size 20 --window_interval_rate 2  \
 2> /pscratch/sd/p/pakmasha/ENIGMA_OCD_MBBN_git/ENIGMA_OCD_MBBN/MBBN-main/failed_experiments/enigma_ocd_pretrain_error.log
 

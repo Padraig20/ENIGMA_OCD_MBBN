@@ -7,8 +7,9 @@ def objective(trial):
     # Get default arguments. Use os.getcwd() as the base_path.
     args = get_arguments(base_path=os.getcwd())
 
-    # Override selected hyperparameters for tuning.
-    # For phase3 training (e.g., pretraining) tune the learning rate and policy.
+    """ 
+    Fixed parameters
+    """
     args.dataset_name = "ENIGMA_OCD"
     args.wandb_mode = "offline"
     args.step = 3
@@ -27,32 +28,52 @@ def objective(trial):
     args.use_mask_loss = True
     args.masking_method = "spatiotemporal"
     args.distributed = False
-    args.masking_rate = 0.1
-
-    args.lr_init_phase3 = 3e-5
-    # args.lr_policy_phase3 = "step"
-    args.lr_policy_phase3 = trial.suggest_categorical("lr_policy_phase3", ["step", "SGDR"])
-    
-
-    args.spat_diff_loss_type = "minus_log"
-    args.spatial_loss_factor = 4.0
-
-    
-    args.spatial_masking_type = "random_ROIs"
-    args.num_random_ROIs = 290
     args.temporal_masking_type = "time_window"
+
+    """
+    Learning rate parameters
+    """
+    args.lr_init_phase3 = 0.0003
+    args.lr_policy_phase3 = "step"
+    args.weight_decay_phase3 = 0.0039
+    args.lr_gamma_phase3 = 0.93
+    args.lr_step_phase3 = 3500
+    args.lr_warmup_phase3 = 400
+    # args.lr_init_phase3 = trial.suggest_float("lr_init_phase2", 1e-5, 3e-4)
+    # args.lr_policy_phase3 = trial.suggest_categorical("lr_policy_phase3", ["step", "SGDR"])
+    # args.weight_decay_phase3 = trial.suggest_float("weight_decay_phase2", 1e-4, 1e-2)
+    # args.lr_gamma_phase3 = trial.suggest_float("lr_gamma_phase2", 0.90, 0.99)
+    # args.lr_step_phase3 = trial.suggest_int("lr_step_phase2", 1000, 5000, step=500)
+    # args.lr_warmup_phase3 = trial.suggest_int("lr_warmup_phase2", 100, 2000, step=100)
+
+    """
+    Spatial difference loss
+    """
+    args.spat_diff_loss_type = "minus_log"
+    # args.spatial_loss_factor = 4.0
+    args.spatial_loss_factor = trial.suggest_float("spatial_loss_factor", 1.0, 5.0)
+
+    """
+    Spatial masking
+    """
+    args.spatial_masking_type = "hub_ROIs"
+    args.hub_ROIs = 300
+    args.communicability_option == "remove_high_comm_node"
+
+    """
+    Temporal masking
+    """
     args.temporal_masking_window_size = 20
     args.window_interval_rate = 2
+    args.masking_rate = 0.1
+
+    """
+    Optimizer
+    """
     args.optim_phase3 = "AdamW"
-    args.weight_decay_phase3 = 1e-2
-    args.lr_gamma_phase3 = 0.97
-    args.lr_step_phase3 = 3000
-    args.lr_warmup_phase3 = 500
-    
-    # args.lr_init_phase3 = trial.suggest_float("lr_init_phase3", 3e-5, 3e-4, log=True)
-    
+
     # For tuning speed set a small number of epochs.
-    args.nEpochs_phase3 = 2
+    args.nEpochs_phase3 = 3
   
     # When preparing visualization (or depending on your settings), sets is chosen accordingly.
     # For tuning, we simply use all.
@@ -81,17 +102,26 @@ def objective(trial):
     # (best_AUROC, best_loss, best_MAE)
     best_AUROC, best_loss, best_MAE = trainer.training()
   
-    # Choose the objective metric based on the task.
-    # For regression, we minimize loss; for classification, assume maximization of AUROC,
-    # so we return negative AUROC to make it a minimization problem.
-    if args.fine_tune_task == 'binary_classification':
-        return -best_AUROC
-    else:
-        return best_loss
+    # Since in reconstruction mode the validation/test metrics are not computed,
+    # we rely on the loss history recorded by the writer.
+    try:
+        # Check if the writer has recorded the total loss history for the training set.
+        if hasattr(trainer.writer, "total_train_loss_history") and trainer.writer.total_train_loss_history:
+            print(trainer.writer.total_train_loss_history)
+            min_loss = min(trainer.writer.total_train_loss_history)
+            print(f"Using minimum loss from history: {min_loss}")
+        else:
+            print("No total_train_loss_history found; using best_loss from training()")
+            min_loss = best_loss
+    except Exception as e:
+        print("Error retrieving training loss history:", e)
+        min_loss = best_loss
+
+    return min_loss
 
 def main():
     study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=3)  # Adjust the number of trials as needed
+    study.optimize(objective, n_trials = 20)  # Adjust the number of trials as needed
 
     print("Best trial:")
     trial = study.best_trial

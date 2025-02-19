@@ -1,11 +1,12 @@
 #!/bin/bash
 #SBATCH -A m4750
 #SBATCH -C gpu
-#SBATCH -q shared
-#SBATCH -t 48:00:00
-#SBATCH -n 1
+#SBATCH -q preempt
+#SBATCH -t 24:00:00
+#SBATCH -N 1
 #SBATCH -c 32
-#SBATCH --gpus-per-task=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --gpus-per-task=4
 #SBATCH --mail-type=begin,end,fail
 #SBATCH --mail-user=pakmasha99@gmail.com
 #SBATCH --output=/pscratch/sd/p/pakmasha/ENIGMA_OCD_MBBN_git/ENIGMA_OCD_MBBN/MBBN-main/slurm/output_log/slurm_%j.out

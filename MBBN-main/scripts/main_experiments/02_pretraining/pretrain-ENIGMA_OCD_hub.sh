@@ -25,9 +25,9 @@ python main.py --dataset_name ENIGMA_OCD \
 --fmri_type divided_timeseries --transformer_hidden_layers 8 \
 --seq_part head --fmri_dividing_type four_channels \
 --spatiotemporal --spat_diff_loss_type minus_log  --spatial_loss_factor 4.0 \
---exp_name pretraining_hub_700_290roi_highprec_seed1 --seed 1  --sequence_length_phase3 700 \
---intermediate_vec 316 --nEpochs_phase3 1500 --num_heads 4 --filtering_type Boxcar \
---use_mask_loss --masking_method spatiotemporal --spatial_masking_type hub_ROIs --num_hub_ROIs 290 --communicability_option remove_high_comm_node \
+--exp_name hub_1 --seed 1  --sequence_length_phase3 700 \
+--intermediate_vec 316 --nEpochs_phase3 10 --num_heads 4 --filtering_type Boxcar \
+--use_mask_loss --masking_method spatiotemporal --spatial_masking_type hub_ROIs --num_hub_ROIs 300 --communicability_option remove_high_comm_node \
 --temporal_masking_type time_window --temporal_masking_window_size 20 --window_interval_rate 2  \
 2> /pscratch/sd/p/pakmasha/ENIGMA_OCD_MBBN_git/ENIGMA_OCD_MBBN/MBBN-main/failed_experiments/enigma_ocd_pretrain_error.log
 

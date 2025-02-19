@@ -1,3 +1,4 @@
 mask_test_loss_history,mask_train_loss_history,mask_val_loss_history,spatial_difference_test_loss_history,spatial_difference_train_loss_history,spatial_difference_val_loss_history,total_test_loss_history,total_train_loss_history,total_val_loss_history
-,1.6309242606163026,,,23.535713283832255,,,25.16663756737342,
-,1.1890751068408674,,,22.586401910048266,,,23.77547699854924,
+,1.1252834402597867,,,6.341708638117864,,,7.466992077460656,
+,0.9207801736318149,,,5.662291086637056,,,6.583071257517888,
+,0.8219932351356898,,,5.321543989426051,,,6.143537225478735,

@@ -1,9 +1,26 @@
 Best trial:
-  Value: 100000.0
+  Value: 4.7539402863918205
   Params:
-    lr_policy_phase3: step
+    spatial_loss_factor: 1.0004271320638505
 
 All trial results:
-Trial 0: Value = 100000.0, Params = {'lr_policy_phase3': 'step'}
-Trial 1: Value = 100000.0, Params = {'lr_policy_phase3': 'step'}
-Trial 2: Value = 100000.0, Params = {'lr_policy_phase3': 'step'}
+Trial 0: Value = 19.810611177102114, Params = {'spatial_loss_factor': 4.83141924487416}
+Trial 1: Value = 13.493217727465508, Params = {'spatial_loss_factor': 3.2240328721605276}
+Trial 2: Value = 7.408154822618533, Params = {'spatial_loss_factor': 1.6757607319096208}
+Trial 3: Value = 18.109883993099896, Params = {'spatial_loss_factor': 4.398689029792946}
+Trial 4: Value = 13.935757304460575, Params = {'spatial_loss_factor': 3.3366319904371933}
+Trial 5: Value = 7.160915663303473, Params = {'spatial_loss_factor': 1.6128537855405174}
+Trial 6: Value = 18.440849900856996, Params = {'spatial_loss_factor': 4.482898815835419}
+Trial 7: Value = 12.877642206045298, Params = {'spatial_loss_factor': 3.0674066588869042}
+Trial 8: Value = 7.251451110839843, Params = {'spatial_loss_factor': 1.6358890738017982}
+Trial 9: Value = 19.275196222158577, Params = {'spatial_loss_factor': 4.695188813356453}
+Trial 10: Value = 4.924073916215163, Params = {'spatial_loss_factor': 1.0437153926116352}
+Trial 11: Value = 5.1542633105547, Params = {'spatial_loss_factor': 1.1022845655639295}
+Trial 12: Value = 5.027845284877679, Params = {'spatial_loss_factor': 1.0701188077108654}
+Trial 13: Value = 9.677270546937601, Params = {'spatial_loss_factor': 2.2531100492738476}
+Trial 14: Value = 4.7539402863918205, Params = {'spatial_loss_factor': 1.0004271320638505}
+Trial 15: Value = 9.146414517133664, Params = {'spatial_loss_factor': 2.1180404093617193}
+Trial 16: Value = 10.288469793857672, Params = {'spatial_loss_factor': 2.408622467912661}
+Trial 17: Value = 15.690747784345579, Params = {'spatial_loss_factor': 3.783168333737786}
+Trial 18: Value = 11.354635703258026, Params = {'spatial_loss_factor': 2.6798962642312247}
+Trial 19: Value = 6.143537225478735, Params = {'spatial_loss_factor': 1.3539937590322872}
