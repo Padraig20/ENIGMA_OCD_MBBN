@@ -7,3 +7,5 @@ MBBN-main/failed_experiments
 ENIGMA-OCD_results/QC/carpet_plots
 ENIGMA-OCD_results/QC/ENIGMA_QC_FC_data.csv
 ENIGMA-OCD_results/QC/Nothing.ipynb
+
+__pycache__

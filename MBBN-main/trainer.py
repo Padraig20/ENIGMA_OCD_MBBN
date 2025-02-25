@@ -188,7 +188,7 @@ class Trainer():
                 self.model = Transformer_Finetune(**self.kwargs)
             elif self.fmri_type == 'divided_timeseries':
                 if self.fmri_dividing_type == 'four_channels':                   
-                    self.model = Transformer_Finetune_Four_Channels(**self.kwargs)
+                    self.model = Transformer_Finetune_Four_Channels_IO(**self.kwargs)
                 if self.fmri_dividing_type == 'three_channels':                   
                     self.model = Transformer_Finetune_Three_Channels(**self.kwargs)
                 elif self.fmri_dividing_type == 'two_channels':
@@ -202,7 +202,7 @@ class Trainer():
             if self.fmri_dividing_type == 'three_channels':                
                 self.model = Transformer_Finetune_Three_Channels(**self.kwargs)
             elif self.fmri_dividing_type == 'four_channels':       
-                self.model = Transformer_Finetune_Four_Channels(**self.kwargs)
+                self.model = Transformer_Finetune_Four_Channels_IO(**self.kwargs)
             elif self.fmri_dividing_type == 'five_channels':                
                 self.model = Transformer_Finetune_Five_Channels(**self.kwargs)
                 
